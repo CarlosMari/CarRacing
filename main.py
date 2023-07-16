@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-
+from tqdm import tqdm
 # We create the enviroment
 env = gym.make("CarRacing-v2",continuous=False)
 
@@ -147,16 +147,20 @@ def optimize_model():
     optimizer.step()
 
 if torch.cuda.is_available():
-    num_episodes = 600
+    num_episodes = 5
 else:
     num_episodes = 50
 cumulative_reward = 0
-for i_episode in range(num_episodes):
+for i_episode in tqdm(range(num_episodes)):
 
     # Initialize the environment and get it's state
+    if i_episode == num_episodes-1:
+        i = input("Ready?")
+        env = gym.make("CarRacing-v2", continuous=False, render_mode="human")
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     for t in count():
+
         action = select_action(state)
         observation, reward, terminated, truncated, _ = env.step(action.item())
         cumulative_reward += reward
