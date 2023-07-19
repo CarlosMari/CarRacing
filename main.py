@@ -9,7 +9,9 @@ import matplotlib.pyplot as plt
 from collections import namedtuple, deque
 from itertools import count
 
+
 import torch
+
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
@@ -35,11 +37,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # TAU is the update rate of the target network
 # LR is the learning rate of the ``AdamW`` optimizer
 
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 GAMMA = 0.99
-EPS_START = 0.9
+EPS_START = 1.0
 EPS_END = 0.05
-EPS_DECAY = 1000
+EPS_DECAY = 500
 TAU = 0.005
 LR = 1e-4
 
@@ -147,18 +149,14 @@ def optimize_model():
     optimizer.step()
 
 if torch.cuda.is_available():
-    num_episodes = 5
+    num_episodes = 700
 else:
     num_episodes = 50
 cumulative_reward = 0
 for i_episode in tqdm(range(num_episodes)):
-
-    # Initialize the environment and get it's state
-    if i_episode == num_episodes-1:
-        i = input("Ready?")
-        env = gym.make("CarRacing-v2", continuous=False, render_mode="human")
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+    state = state.permute(0, 3, 1, 2)
     for t in count():
 
         action = select_action(state)
@@ -171,7 +169,7 @@ for i_episode in tqdm(range(num_episodes)):
             next_state = None
         else:
             next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
-
+            next_state = next_state.permute(0, 3, 1, 2)
         # Store the transition in memory
         memory.push(state, action, next_state, reward)
 
@@ -186,7 +184,7 @@ for i_episode in tqdm(range(num_episodes)):
         target_net_state_dict = target_net.state_dict()
         policy_net_state_dict = policy_net.state_dict()
         for key in policy_net_state_dict:
-            target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
+            target_net_state_dict[key] = policy_net_state_dict[key] * TAU + target_net_state_dict[key] * (1 - TAU)
         target_net.load_state_dict(target_net_state_dict)
 
         if done:
@@ -198,7 +196,36 @@ for i_episode in tqdm(range(num_episodes)):
             break
 
 
-print('Complete')
+torch.save(policy_net.state_dict(), 'policy_net_weights_1000_LeNet.pth')
+torch.save(target_net.state_dict(), 'target_net_weights_1000_LeNet.pth')
+
+
+print('Completed Training')
+
+
+
+env = gym.make("CarRacing-v2",continuous=False,render_mode='rgb_array')
+env = gym.wrappers.RecordVideo(env, 'video')
+#Visualize
+num_test_episodes = 5  # Number of episodes for testing
+for i_episode in range(num_test_episodes):
+    state, info = env.reset()
+    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+    state = state.permute(0, 3, 1, 2)
+    for t in count():
+        with torch.no_grad():
+            action = policy_net(state).argmax(dim=1)
+
+        observation, _, terminated, truncated, _ = env.step(action.item())
+        state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+        state = state.permute(0, 3, 1, 2)
+        # Render the environment to visualize the agent's actions
+        env.render()
+
+        if terminated or truncated:
+            break
+env.close()
 plot_durations(show_result=True)
 plt.ioff()
 plt.show()
+plt.savefig("LeNet like Structure")
